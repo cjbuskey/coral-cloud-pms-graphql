@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: coral-cloud-pms-graphql
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: BASIC_AUTH_USER
+        value: datacloud
+      - key: BASIC_AUTH_PASSWORD
+        generateValue: true

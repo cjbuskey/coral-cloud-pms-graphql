@@ -1,0 +1,21 @@
+{
+  "name": "coral-cloud-pms-graphql",
+  "version": "1.0.0",
+  "description": "Coral Cloud Resorts PMS — GraphQL source for the Data 360 GraphQL connector demo",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@apollo/server": "^5.5.1",
+    "@as-integrations/express5": "^1.1.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "graphql": "^16.11.0"
+  }
+}
