@@ -9,3 +9,7 @@ services:
         generateValue: true
       - key: OAUTH_CLIENT_SECRET
         generateValue: true
+      - key: BASIC_AUTH_USER
+        value: datacloud
+      - key: BASIC_AUTH_PASSWORD
+        generateValue: true

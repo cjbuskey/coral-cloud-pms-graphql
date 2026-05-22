@@ -60,23 +60,53 @@ export function tokenHandler({ clientId, clientSecret }) {
   };
 }
 
-export function bearerAuth(req, res, next) {
-  const header = req.headers.authorization ?? "";
-  if (!header.startsWith("Bearer ")) {
-    res.set("WWW-Authenticate", 'Bearer realm="coral-cloud-pms"');
-    return res.status(401).json({ error: "Authentication required" });
-  }
-
+function checkBearer(header) {
   const token = header.slice(7);
   const expiresAt = tokens.get(token);
-  if (!expiresAt) {
-    return res.status(401).json({ error: "Invalid token" });
-  }
+  if (!expiresAt) return { ok: false, error: "Invalid token" };
   if (Date.now() > expiresAt) {
     tokens.delete(token);
-    return res.status(401).json({ error: "Token expired" });
+    return { ok: false, error: "Token expired" };
   }
-  next();
+  return { ok: true };
+}
+
+function checkBasic(header, basicUser, basicPassword) {
+  if (!basicUser || !basicPassword) {
+    return { ok: false, error: "Basic auth not configured" };
+  }
+  const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
+  const sep = decoded.indexOf(":");
+  const user = sep === -1 ? decoded : decoded.slice(0, sep);
+  const pass = sep === -1 ? "" : decoded.slice(sep + 1);
+  if (
+    !timingSafeEqual(user, basicUser) ||
+    !timingSafeEqual(pass, basicPassword)
+  ) {
+    return { ok: false, error: "Invalid credentials" };
+  }
+  return { ok: true };
+}
+
+export function authMiddleware({ basicUser, basicPassword } = {}) {
+  return (req, res, next) => {
+    const header = req.headers.authorization ?? "";
+
+    if (header.startsWith("Bearer ")) {
+      const result = checkBearer(header);
+      if (!result.ok) return res.status(401).json({ error: result.error });
+      return next();
+    }
+
+    if (header.startsWith("Basic ")) {
+      const result = checkBasic(header, basicUser, basicPassword);
+      if (!result.ok) return res.status(401).json({ error: result.error });
+      return next();
+    }
+
+    res.set("WWW-Authenticate", 'Bearer realm="coral-cloud-pms", Basic realm="coral-cloud-pms"');
+    return res.status(401).json({ error: "Authentication required" });
+  };
 }
 
 setInterval(() => {
