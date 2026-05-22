@@ -5,7 +5,7 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: BASIC_AUTH_USER
-        value: datacloud
-      - key: BASIC_AUTH_PASSWORD
+      - key: OAUTH_CLIENT_ID
+        generateValue: true
+      - key: OAUTH_CLIENT_SECRET
         generateValue: true
