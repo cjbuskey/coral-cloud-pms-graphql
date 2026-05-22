@@ -32,6 +32,17 @@ await apollo.start();
 
 const app = express();
 
+app.use((req, res, next) => {
+  const started = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - started;
+    console.log(
+      `${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms ua="${req.headers["user-agent"] ?? "-"}"`
+    );
+  });
+  next();
+});
+
 app.get("/health", (_, res) => res.json({ status: "ok" }));
 
 app.post(
