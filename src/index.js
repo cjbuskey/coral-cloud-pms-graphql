@@ -52,16 +52,18 @@ app.post(
   tokenHandler({ clientId: OAUTH_CLIENT_ID, clientSecret: OAUTH_CLIENT_SECRET })
 );
 
-app.use(
-  "/graphql",
+const graphqlHandlers = [
   authMiddleware({ basicUser: BASIC_AUTH_USER, basicPassword: BASIC_AUTH_PASSWORD }),
   cors(),
   express.json({ limit: "1mb" }),
-  expressMiddleware(apollo)
-);
+  expressMiddleware(apollo),
+];
+
+app.use("/graphql", ...graphqlHandlers);
+app.use("/", ...graphqlHandlers);
 
 app.listen(PORT, () => {
   console.log(`Coral Cloud PMS GraphQL listening on :${PORT}`);
-  console.log(`  POST /oauth/token   (client_credentials)`);
-  console.log(`  POST /graphql        (Bearer or Basic auth)`);
+  console.log(`  POST /oauth/token       (client_credentials)`);
+  console.log(`  POST / and /graphql     (Bearer or Basic auth)`);
 });
