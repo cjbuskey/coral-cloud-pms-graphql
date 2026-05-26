@@ -1,20 +1,22 @@
 # Coral Cloud PMS — GraphQL Source
 
-Apollo Server that simulates a Property Management System (PMS) for Coral Cloud Resorts. Built to be the source behind the **Data 360 GraphQL Connector** in the Cisco demo.
+Apollo Server that simulates a hotel Property Management System (PMS) for Coral Cloud Resorts. Designed as a reference source for the **Salesforce Data 360 GraphQL Connector** — a working example of how to expose customer/operational data over GraphQL so it can be federated into Data 360 alongside other systems (lakehouses via zero-copy, other SaaS APIs, etc.) without copying data.
 
 ## Why this exists
 
-The existing demo federates room service requests (`RSR-*`) from Snowflake into Data 360 via zero-copy. Those rows reference `guest_id`, `reservation_id`, and `room_number` but carry **no context** about any of them. This server fills that gap — it exposes guest profiles, reservations, and room metadata as a second federated source. With both sources joined inside Data 360, the Agentforce agent can reason across operations *and* customer context (loyalty tier, lifetime value, prior preferences, in-house vs. checked-out status).
+Most enterprises run their operational ticketing/work-order system separately from their customer-of-record / profile system. Federating both into Data 360 lets agents, analytics, and downstream automation reason across operations *and* customer context (loyalty tier, lifetime value, preferences, current reservation state) in a single query — without ETL or data movement.
+
+This repo is the GraphQL "second source" half of that pattern. Pair it with any other Data 360 source (e.g. a Snowflake table of service requests) to demonstrate cross-source federation.
 
 ## Schema
 
-Three top-level entity queries — each becomes a DLO/DMO when ingested:
+Three top-level entity queries — each becomes a Data Lake Object (DLO) when ingested by the connector:
 
 - `guests` / `guest(guestId)` — profile, loyalty tier, lifetime stays, preferences, VIP flag
 - `reservations` / `reservation(reservationId)` — current/historical stays with totals and status
 - `rooms` / `room(roomNumber)` — room metadata (type, view, accessibility)
 
-All IDs are pinned to the 10 RSR rows in Snowflake so federation joins succeed end-to-end.
+The seed data uses stable IDs that can be joined to whatever operational dataset you federate alongside it.
 
 ## Endpoints
 
@@ -29,7 +31,7 @@ GraphQL is served at both `/graphql` and `/` (the connector POSTs to the URL roo
 
 The server accepts two auth methods on the GraphQL endpoint:
 
-1. **HTTP Basic** — `Authorization: Basic base64(user:password)`. Uses `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD`. **This is what the Data 360 GraphQL Connector actually uses** — its beta release does not support Named Credential / OAuth Client Credentials at runtime (it returns `Protocol type [OAUTH_CLIENT_CREDS_CLIENT_SECRET] is not supported`).
+1. **HTTP Basic** — `Authorization: Basic base64(user:password)`. Uses `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD`. **This is what the Data 360 GraphQL Connector uses today** — its current beta does not support Named Credential / OAuth Client Credentials at runtime (the connector returns `Protocol type [OAUTH_CLIENT_CREDS_CLIENT_SECRET] is not supported`).
 2. **OAuth 2.0 Bearer (Client Credentials grant)** — `Authorization: Bearer <token>`. Token is issued by `POST /oauth/token` from `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET`. Useful for Apex callouts via Named Credential, integration tests, and any future tooling that prefers OAuth.
 
 Tokens are opaque (random 32-byte base64url) and held in memory. Restart invalidates them; clients re-fetch automatically.
@@ -59,7 +61,7 @@ Smoke test (Basic auth — what the connector uses):
 ```bash
 curl -u "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" \
   -H 'content-type: application/json' \
-  -d '{"query":"{ guest(guestId: \"20004993\") { firstName lastName loyaltyTier lifetimeSpend preferences } }"}' \
+  -d '{"query":"{ guests { guestId firstName lastName loyaltyTier } }"}' \
   http://localhost:4000/
 ```
 
@@ -74,24 +76,24 @@ TOKEN=$(curl -s -X POST \
 
 curl -H "Authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"query":"{ guest(guestId: \"20004993\") { firstName loyaltyTier } }"}' \
+  -d '{"query":"{ guests { guestId firstName loyaltyTier } }"}' \
   http://localhost:4000/graphql
 ```
 
-Either should return Anastasia Volkov, DIAMOND, $248,500 lifetime, temperature-sensitive sleeper.
+Either should return the seeded guest list.
 
 ## Deploy to Render
 
 1. Push this folder to a Git repo.
 2. Render → New → **Blueprint** → point at the repo. `render.yaml` creates a Docker web service on the free plan and seeds env vars (auto-generated for OAuth + basic auth secrets, `datacloud` as the basic auth username).
-3. After the first deploy, copy the generated `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, and `BASIC_AUTH_PASSWORD` from the service's **Environment** tab — you'll paste them into Salesforce next.
-4. Note the public URL: `https://coral-cloud-pms-graphql.onrender.com` (or similar).
+3. After the first deploy, copy the generated `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, and `BASIC_AUTH_PASSWORD` from the service's **Environment** tab — you'll paste the basic auth password into Salesforce next.
+4. Note the public URL Render assigns (e.g. `https://<your-service>.onrender.com`).
 
-Free tier sleeps after ~15 min idle and cold-starts on the next request. Fine for development; for a live demo, either warm with `curl /health` 60s before, or upgrade to Starter ($7/mo) for the demo week and downgrade after.
+Render's free tier sleeps after ~15 min idle and cold-starts on the next request. Fine for development and ad-hoc testing; for a live walkthrough, either warm the service with `curl /health` 60s beforehand, or upgrade to the Starter plan for the duration.
 
 ## Wire the Data 360 GraphQL Connector
 
-Per the [beta docs](https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-graphql-connector.html). The connector is CData under the hood — it POSTs to the URL root, supports Basic and (in this beta) does **not** support Client Credentials OAuth.
+Per the [beta docs](https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-graphql-connector.html). The connector is CData under the hood — it POSTs to the URL root, supports Basic auth, and (in the current beta) does **not** support Client Credentials OAuth.
 
 ### Connection
 
@@ -115,7 +117,7 @@ For each entity (`guests`, `reservations`, `rooms`):
 
 Skip the singular variants (`guest`, `reservation`, `room`) — those are arg-required lookups, not list queries the connector can ingest.
 
-Map the resulting DLOs into DMOs and join against the existing Snowflake `room_service_request` DMO via `guest_id` / `reservation_id` / `room_number`.
+Once the streams are deployed, map the resulting DLOs into DMOs and join them against your other federated sources (e.g. a Snowflake-resident operational table) on the shared keys (`guest_id`, `reservation_id`, `room_number`).
 
 ### Optional: External / Named Credential for Apex callouts
 
@@ -129,7 +131,7 @@ The OAuth Client Credentials path on the server is still useful for `callout:` f
    req.setEndpoint('callout:Coral_Cloud_PMS/graphql');
    req.setMethod('POST');
    req.setHeader('Content-Type', 'application/json');
-   req.setBody('{"query":"{guest(guestId:\\"20004993\\"){firstName loyaltyTier}}"}');
+   req.setBody('{"query":"{guests{guestId firstName loyaltyTier}}"}');
    System.debug(new Http().send(req).getBody());
    ```
 
@@ -139,11 +141,3 @@ The OAuth Client Credentials path on the server is still useful for `callout:` f
 - All Render env vars are either auto-generated (`generateValue: true`) or non-secret (`BASIC_AUTH_USER=datacloud`)
 - No real client IDs, secrets, or passwords appear anywhere in the tree or git history
 - If a secret leaks, rotate via Render's **Environment** tab — generate a new value, save, redeploy. Update the connector's Basic password in Salesforce to match.
-
-## Demo punchline
-
-Before this connector: "RSR-100001 is a high-priority AC complaint from guest 20004993 in room 385."
-
-After this connector + DMO join: "RSR-100001 is a high-priority AC complaint from **Anastasia Volkov, Diamond tier, 17 lifetime stays, $248K lifetime spend, currently in-house in a $2,400/night Oceanfront Villa, checking out tomorrow** — and her profile flags her as a temperature-sensitive sleeper. The reservation note already asked us to pre-cool the room."
-
-Same agent, same Slack-triggered case creation flow. Two sources, federated via Data 360, no data moved.

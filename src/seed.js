@@ -1,8 +1,9 @@
 // Seed data for the Coral Cloud PMS GraphQL source.
 //
-// IDs are pinned to the Snowflake RSR rows that Data 360 already federates.
-// Every guest_id, reservation_id, and room_number that appears in an RSR row
-// must exist here so federation joins succeed in the demo.
+// IDs are pinned to a companion set of room service request (RSR) rows that
+// can be federated into Data 360 alongside this source. Every guest_id,
+// reservation_id, and room_number that appears in an RSR row exists here so
+// cross-source federation joins resolve.
 //
 // RSR coverage:
 //   RSR-100001 guest 20004993 res 10009704 room 385 (Maintenance/AC, High)

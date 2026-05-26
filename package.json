@@ -1,7 +1,7 @@
 {
   "name": "coral-cloud-pms-graphql",
   "version": "1.0.0",
-  "description": "Coral Cloud Resorts PMS — GraphQL source for the Data 360 GraphQL connector demo",
+  "description": "Coral Cloud Resorts PMS — reference GraphQL source for the Salesforce Data 360 GraphQL Connector",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
